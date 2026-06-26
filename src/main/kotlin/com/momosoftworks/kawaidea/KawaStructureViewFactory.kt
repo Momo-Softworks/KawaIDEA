@@ -69,6 +69,14 @@ private class KawaStructureRootElement(
             .map { KawaDefiningFormElement(it) }
             .toTypedArray()
     }
+
+    override fun navigate(requestFocus: Boolean) {
+        file.navigate(requestFocus)
+    }
+
+    override fun canNavigate(): Boolean = file.canNavigate()
+
+    override fun canNavigateToSource(): Boolean = file.canNavigateToSource()
 }
 
 /**
@@ -98,6 +106,16 @@ private class KawaDefiningFormElement(
     }
 
     override fun getChildren(): Array<TreeElement> = emptyArray()
+
+    override fun navigate(requestFocus: Boolean) {
+        form.containingFile?.navigate(requestFocus)
+    }
+
+    override fun canNavigate(): Boolean =
+        form.containingFile?.canNavigate() ?: false
+
+    override fun canNavigateToSource(): Boolean =
+        form.containingFile?.canNavigateToSource() ?: false
 
     companion object {
         fun extractName(head: String, forms: List<KawaForm>): String? {

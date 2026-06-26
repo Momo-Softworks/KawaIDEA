@@ -1,7 +1,11 @@
 package com.momosoftworks.kawaidea
 
+import com.intellij.openapi.Disposable
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.vfs.VirtualFileManager
+import com.intellij.openapi.vfs.newvfs.BulkFileListener
+import com.intellij.openapi.vfs.newvfs.events.VFileEvent
 import com.intellij.psi.PsiManager
 import com.intellij.psi.search.FileTypeIndex
 import com.intellij.psi.search.GlobalSearchScope
@@ -16,10 +20,28 @@ import com.momosoftworks.kawaidea.psi.KawaList
  * (via message bus) and lazily rebuilt on first access.
  */
 @Service(Service.Level.PROJECT)
-class KawaProjectCache(private val project: Project) {
+class KawaProjectCache(private val project: Project) : Disposable {
 
     @Volatile
     private var cached: Set<String>? = null
+
+    init {
+        // Invalidate the cache whenever a Kawa file is created, changed, or deleted.
+        project.messageBus.connect(this).subscribe(
+            VirtualFileManager.VFS_CHANGES,
+            object : BulkFileListener {
+                override fun after(events: MutableList<out VFileEvent>) {
+                    if (events.any { e -> e.file?.fileType is KawaFileType }) {
+                        invalidate()
+                    }
+                }
+            },
+        )
+    }
+
+    override fun dispose() {
+        cached = null
+    }
 
     /** Return all top-level symbol names defined in Kawa files in this project. */
     fun allDefinedSymbols(): Set<String> {

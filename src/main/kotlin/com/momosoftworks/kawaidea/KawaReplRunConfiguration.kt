@@ -14,8 +14,12 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.projectRoots.JavaSdk
 import com.intellij.openapi.roots.ModuleRootManager
 import com.intellij.openapi.roots.OrderEnumerator
+import com.intellij.openapi.util.InvalidDataException
+import com.intellij.openapi.util.JDOMExternalizerUtil
 import com.intellij.openapi.util.NotNullLazyValue
+import com.intellij.openapi.util.WriteExternalException
 import com.intellij.util.ui.FormBuilder
+import org.jdom.Element
 import javax.swing.JComponent
 import javax.swing.JPanel
 import javax.swing.JTextField
@@ -34,6 +38,16 @@ class KawaReplRunConfiguration(
 ) : RunConfigurationBase<Any?>(project, factory, name) {
 
     var port: Int = 4243
+
+    override fun readExternal(element: Element) {
+        super.readExternal(element)
+        port = JDOMExternalizerUtil.readField(element, PORT_KEY)?.toIntOrNull() ?: 4243
+    }
+
+    override fun writeExternal(element: Element) {
+        super.writeExternal(element)
+        JDOMExternalizerUtil.writeField(element, PORT_KEY, port.toString())
+    }
 
     override fun getConfigurationEditor(): SettingsEditor<out RunConfiguration> =
         KawaReplSettingsEditor()
@@ -89,6 +103,9 @@ class KawaReplConfigurationType : ConfigurationTypeBase(
         const val ID = "kawa-repl"
     }
 }
+
+/** Companion key names for persistence. */
+private const val PORT_KEY = "PORT"
 
 class KawaReplSettingsEditor : SettingsEditor<KawaReplRunConfiguration>() {
     private val portField = JTextField("4243", 6)
