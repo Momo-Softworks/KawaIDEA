@@ -20,30 +20,32 @@ class KawaFormatterTest : BasePlatformTestCase() {
         return myFixture.file.text
     }
 
-    // SPECIAL: body indents a fixed +2.
+    private fun assertReformat(expected: String, before: String) {
+        val actual = reformat(before)
+        // Print both so CI logs show the diff when it fails.
+        println("BEFORE:  ${before.replace("\n", "\\n")}")
+        println("ACTUAL:  ${actual.replace("\n", "\\n")}")
+        println("EXPECT:  ${expected.replace("\n", "\\n")}")
+        assertEquals(expected, actual)
+    }
+
     fun testDefineBodyIndentsTwo() {
-        assertEquals("(define (f x)\n  (+ x 1))", reformat("(define (f x)\n(+ x 1))"))
+        assertReformat("(define (f x)\n  (+ x 1))", "(define (f x)\n(+ x 1))")
     }
 
     fun testLetBodyIndentsTwo() {
-        assertEquals("(let ((x 1))\n  (+ x 1))", reformat("(let ((x 1))\n     (+ x 1))"))
+        assertReformat("(let ((x 1))\n  (+ x 1))", "(let ((x 1))\n     (+ x 1))")
     }
 
-    // Nesting must accumulate: inner body is +2 from the inner form, not the outer.
     fun testSpecialNestingAccumulates() {
-        assertEquals(
-            "(when a\n  (when b\n    (foo)))",
-            reformat("(when a\n(when b\n(foo)))"),
-        )
+        assertReformat("(when a\n  (when b\n    (foo)))", "(when a\n(when b\n(foo)))")
     }
 
-    // CALL: arguments align under the first argument.
     fun testCallAlignsArgsUnderFirstArg() {
-        assertEquals("(foo bar\n     baz)", reformat("(foo bar\n  baz)"))
+        assertReformat("(foo bar\n     baz)", "(foo bar\n  baz)")
     }
 
-    // DATA: elements align under the first element (head is not a symbol).
     fun testDataListAlignsUnderFirstElement() {
-        assertEquals("((a)\n (b))", reformat("((a)\n        (b))"))
+        assertReformat("((a)\n (b))", "((a)\n        (b))")
     }
 }
