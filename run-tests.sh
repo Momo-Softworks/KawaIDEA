@@ -35,7 +35,7 @@ failures=0
 run_test() {
     local cls="$1"
     echo "=== $cls ==="
-    if java -cp "$CP" org.junit.runner.JUnitCore "$cls" 2>&1; then
+    if "$JAVA_HOME/bin/java" -cp "$CP" org.junit.runner.JUnitCore "$cls" 2>&1; then
         echo "  PASS"
     else
         echo "  FAIL"
@@ -45,6 +45,7 @@ run_test() {
 }
 
 run_test com.momosoftworks.kawaidea.KawaNamesTest
+run_test com.momosoftworks.kawaidea.KawaSemanticTest
 run_test com.momosoftworks.kawaidea.KawaCompletionLogicTest
 run_test com.momosoftworks.kawaidea.KawaFormsTest
 

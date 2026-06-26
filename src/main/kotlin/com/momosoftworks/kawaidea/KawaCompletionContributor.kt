@@ -60,10 +60,24 @@ enum class CompletionMode {
  * Classify a completion prefix into the correct [CompletionMode].
  * Visible for testing.
  */
-fun classifyPrefix(prefix: String): CompletionMode = when {
-    ':' in prefix && prefix.indexOf(':') < prefix.length -> CompletionMode.JAVA_MEMBER
-    '.' in prefix                                        -> CompletionMode.DOT_PREFIX
-    else                                                 -> CompletionMode.SCHEME_SYMBOL
+fun classifyPrefix(prefix: String): CompletionMode {
+    if (':' in prefix) {
+        if (prefix.endsWith(':') && !prefix.startsWith("#:") && prefix.length > 1) {
+            val owner = prefix.dropLast(1)
+            if ((KawaSemantic.isJavaQualifiedName(owner) && KawaSemantic.isLikelyClassName(owner.substringAfterLast('.'))) ||
+                (KawaSemantic.isJavaIdentifier(owner) && KawaSemantic.isLikelyClassName(owner))
+            ) {
+                return CompletionMode.JAVA_MEMBER
+            }
+        }
+        return when (KawaSemantic.classifyColonSymbol(prefix).kind) {
+            ColonKind.JAVA_FQN_MEMBER,
+            ColonKind.SHORT_CLASS_MEMBER,
+            ColonKind.LEADING_RECEIVER_MEMBER -> CompletionMode.JAVA_MEMBER
+            else -> CompletionMode.SCHEME_SYMBOL
+        }
+    }
+    return if ('.' in prefix) CompletionMode.DOT_PREFIX else CompletionMode.SCHEME_SYMBOL
 }
 
 /**

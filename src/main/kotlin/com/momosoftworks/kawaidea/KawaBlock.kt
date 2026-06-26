@@ -83,7 +83,7 @@ class KawaBlock(
 
                     isComment(child) ->
                         // Comments ride with the body but don't count as elements.
-                        blocks.add(KawaBlock(child, null, seqAlignment, Indent.getSpaceIndent(2)))
+                        blocks.add(KawaBlock(child, null, seqAlignment, Indent.getSpaceIndent(DEFAULT_INDENT_SIZE)))
 
                     else -> {
                         blocks.add(elementBlock(child, elementIndex))
@@ -96,29 +96,31 @@ class KawaBlock(
         return blocks
     }
 
+    // Fixed 2‑space indent used by Kawa MVP (Lisp style). This constant centralizes the indent size.
+
     private fun elementBlock(child: ASTNode, elementIndex: Int): KawaBlock {
         val isHead = elementIndex == 0
         return when (mode) {
             // Body forms after the head indent +2; the head itself sits flush.
             SeqMode.SPECIAL ->
-                KawaBlock(child, null, null, if (isHead) Indent.getNoneIndent() else Indent.getSpaceIndent(2))
+                KawaBlock(child, null, null, if (isHead) Indent.getNoneIndent() else Indent.getSpaceIndent(DEFAULT_INDENT_SIZE))
 
             // Function call: head flush; args align under the first argument.
             SeqMode.CALL ->
                 if (isHead) KawaBlock(child, null, null, Indent.getNoneIndent())
-                else KawaBlock(child, null, seqAlignment, Indent.getSpaceIndent(2))
+                else KawaBlock(child, null, seqAlignment, Indent.getSpaceIndent(DEFAULT_INDENT_SIZE))
 
             // Data list: every element aligns under the first element.
             SeqMode.DATA ->
-                KawaBlock(child, null, seqAlignment, Indent.getSpaceIndent(2))
+                KawaBlock(child, null, seqAlignment, Indent.getSpaceIndent(DEFAULT_INDENT_SIZE))
         }
     }
 
     override fun getChildAttributes(newChildIndex: Int): ChildAttributes {
         if (!isSequence) return ChildAttributes(Indent.getNoneIndent(), null)
         return when (mode) {
-            SeqMode.SPECIAL -> ChildAttributes(Indent.getSpaceIndent(2), null)
-            SeqMode.CALL, SeqMode.DATA -> ChildAttributes(Indent.getSpaceIndent(2), seqAlignment)
+            SeqMode.SPECIAL -> ChildAttributes(Indent.getSpaceIndent(DEFAULT_INDENT_SIZE), null)
+            SeqMode.CALL, SeqMode.DATA -> ChildAttributes(Indent.getSpaceIndent(DEFAULT_INDENT_SIZE), seqAlignment)
         }
     }
 
@@ -160,6 +162,13 @@ class KawaBlock(
         child.elementType == KawaTypes.LINE_COMMENT || child.elementType == KawaTypes.BLOCK_COMMENT
 
     companion object {
+        /**
+         * Fixed 2‑space indent used by Kawa MVP (Lisp style). This constant centralizes the indent size.
+         * The IDE's CodeStyleSettings are intentionally ignored; Lisp indentation is conventionally 2 spaces.
+         * NOTE: Formatter uses `DEFAULT_INDENT_SIZE` (2) regardless of IDE settings, matching Lisp conventions.
+         */
+        private const val DEFAULT_INDENT_SIZE = 2
+
         /**
          * false (default) = uniform 2-space indent: every nested form indents +2,
          *   no alignment (Emacs `lisp-indent-offset` / fixed-offset style).

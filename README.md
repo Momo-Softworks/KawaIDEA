@@ -1,42 +1,51 @@
 # KawaIDEA
 
 A native IntelliJ Platform language plugin for **Kawa** (JVM Scheme), built to
-make editing `.scm` files for KawaCraft / Patina feel alive: real highlighting,
-Emacs-style indentation, Scheme→Java navigation, and completion.
+make editing `.scm` and `.sld` files for KawaCraft / Patina feel alive: real
+highlighting, Emacs‑style indentation, Scheme→Java navigation, and completion.
 
 ## Why a native plugin (not a TextMate grammar or LSP)
 
-TextMate-based "Scheme" plugins are regex highlighters with no model of the
+TextMate‑based "Scheme" plugins are regex highlighters with no model of the
 code, so they can't do indentation or completion. An LSP server can't reach
 IntelliJ's Java PSI, so it can't give real Scheme→Java navigation. A native
 plugin can do all of it — and Scheme is trivial to parse (atoms + lists), so
 the usual hard part of a language plugin is nearly free here.
 
-## Roadmap
+## Implemented MVP features
 
-| Milestone | Delivers | Status |
-|-----------|----------|--------|
-| **M0** | Plugin skeleton, `.scm` registered | done |
-| **M1** | Lexer + parser → PSI, brace matching, basic highlighting | done (this scaffold) |
-| **M2** | Annotator: special forms, defined names, `Class:method` interop, keyword args, FQNs | done |
-| **M3** | Formatter: SPECIAL (+2 body) / CALL / DATA indent modes, 2-space default, reformat tests | done |
-| **M4** | `PsiReference` resolving interop FQNs into Java PSI (ctrl-click Scheme→Java) | done |
-| **M5** | Completion: in-file symbols → Java members → live Kawa reflection | todo |
+- **File type** registration for `.scm` and `.sld`.
+- **Lexer / parser / PSI** generated from JFlex and Grammar‑Kit.
+- **Syntax highlighting** and brace matching.
+- **Annotator** for special forms, defined names, keyword arguments, and
+  `Class:method` interop.
+- **Formatter** with 2‑space indentation (Lisp‑style).
+- **Reference resolution** (`PsiReference`) that links Scheme symbols to Java
+  classes and members.
+- **Completion** offering in‑file symbols and Java member suggestions.
+- **Structure view** for quick navigation of top‑level forms.
+- **REPL run configuration** allowing you to launch a Kawa REPL directly from
+  the IDE.
 
-## Layout
+## First‑class Kawa roadmap (post‑MVP)
 
-```
-src/main/grammars/Kawa.flex   JFlex lexer       -> generates KawaLexer.java
-src/main/grammars/Kawa.bnf    Grammar-Kit BNF   -> generates parser + PSI + KawaTypes
-src/main/gen/                 GENERATED (gitignored) — run codegen before compiling
-src/main/kotlin/...           Language, file type, parser definition, highlighter, brace matcher
-src/main/resources/META-INF/plugin.xml   extension-point registrations
-```
+| Item | Description |
+|------|-------------|
+| Imports / modules / exports stubs | Basic support for `import`, `module`, and `export` forms. |
+| Richer lexical scopes | Precise scope handling for let‑bindings, definitions, and macros. |
+| Java member overloads / types | Resolve overloaded methods and provide type‑aware completions. |
+| Run / compile configurations | More flexible execution and compilation options in the IDE. |
+| Inspections | Detect common mistakes (unused vars, mismatched arities, etc.). |
+| Documentation provider | Show Kawa and Java doc pop‑ups for symbols. |
+| Macro expansion | Visualize macro-expanded code and support macro‑aware navigation. |
 
-## Build & run
+## Build & run (IntelliJ target 2026.1 / build 261.*)
 
-Requires JDK 17 or 21 (set one as the Gradle JVM). The build downloads the
-target IDE the first time, so the initial run is slow.
+The project is configured to target **IntelliJ IDEA 2026.1** (sinceBuild `261`,
+untilBuild `261.*`).
+
+Requires JDK 17 or 21 (set one as the Gradle JVM). The first build will download
+the target IDE, so the initial run is slower.
 
 ```bash
 ./gradlew generateLexer generateParser   # codegen into src/main/gen (also runs automatically)
@@ -45,12 +54,18 @@ target IDE the first time, so the initial run is slow.
 ```
 
 In IntelliJ: open this folder as a Gradle project, then use the **Run Plugin**
-(`runIde`) configuration. Open a `.scm` file — you should get highlighting,
-brace matching, and (View → Tool Windows → ... / PSI Viewer) a real PSI tree.
+(`runIde`) configuration. Open a `.scm` or `.sld` file – you should see
+highlighting, brace matching, PSI view, structure view, and the REPL run
+configuration.
 
-### Notes / things to confirm
-- `build.gradle.kts` targets IntelliJ IDEA Community `2024.3`. Bump it to match
-  the IDE you run, and adjust `sinceBuild` accordingly.
-- The plugin claims `.scm`. **Disable your existing Scheme plugin** to avoid a
-  file-type conflict.
-# KawaIDEA
+### Test notes
+- Tests are executed in the Guix environment with `JAVA_HOME` set appropriately
+  (e.g., `JAVA_HOME=/gnu/store/...-openjdk-21.0.2-jdk`).
+- The current pure‑test helper (`run-tests.sh`) runs JUnit4 tests without requiring
+  an IDE.
+
+### Things to confirm
+- The plugin registers the `.scm` and `.sld` extensions. Disable any other
+  Scheme plugin to avoid file‑type conflicts.
+- Ensure the `build.gradle.kts` `ideaVersion` block matches the target IDE version
+  (2026.1 / build 261.*).

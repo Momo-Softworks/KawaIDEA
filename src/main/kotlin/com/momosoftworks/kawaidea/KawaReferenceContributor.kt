@@ -35,16 +35,21 @@ class KawaReferenceContributor : PsiReferenceContributor() {
         if (element.firstChild?.node?.elementType != KawaTypes.SYMBOL) return PsiReference.EMPTY_ARRAY
         val text = element.text
 
-        // pkg.Class:member  ->  class part + member part
-        KawaNames.splitInterop(text)?.let { (classFqn, member, colon) ->
+        // Class:member  ->  class part + member part. Use the shared classifier so
+        // namespace-like `foo:bar` and keyword forms do not get Java references.
+        val classification = KawaSemantic.classifyColonSymbol(text)
+        if (classification.kind == ColonKind.JAVA_FQN_MEMBER || classification.kind == ColonKind.SHORT_CLASS_MEMBER) {
+            val className = classification.owner ?: return PsiReference.EMPTY_ARRAY
+            val member = classification.member ?: return PsiReference.EMPTY_ARRAY
+            val colon = classification.colonIndex
             return arrayOf(
-                KawaClassReference(element, TextRange(0, colon), classFqn),
-                KawaMemberReference(element, TextRange(colon + 1, text.length), classFqn, member),
+                KawaClassReference(element, TextRange(0, colon), className),
+                KawaMemberReference(element, TextRange(colon + 1, text.length), className, member),
             )
         }
 
         // bare fully-qualified class name
-        if (KawaNames.isClassFqn(text)) {
+        if (KawaNames.isClassFqn(text) || KawaSemantic.isJavaQualifiedName(text)) {
             return arrayOf(KawaClassReference(element, TextRange(0, text.length), text))
         }
 

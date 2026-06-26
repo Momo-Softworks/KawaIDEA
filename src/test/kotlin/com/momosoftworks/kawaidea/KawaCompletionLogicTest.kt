@@ -32,6 +32,9 @@ class KawaCompletionLogicTest {
         assertEquals(CompletionMode.SCHEME_SYMBOL, classifyPrefix("defi"))
         assertEquals(CompletionMode.SCHEME_SYMBOL, classifyPrefix(""))
         assertEquals(CompletionMode.SCHEME_SYMBOL, classifyPrefix("invoke-st"))
+        assertEquals(CompletionMode.SCHEME_SYMBOL, classifyPrefix("name:"))
+        assertEquals(CompletionMode.SCHEME_SYMBOL, classifyPrefix("#:name"))
+        assertEquals(CompletionMode.SCHEME_SYMBOL, classifyPrefix("foo:bar"))
     }
 
     @Test

@@ -12,6 +12,7 @@ import com.intellij.ide.util.treeView.smartTree.TreeElement
 import com.intellij.lang.PsiStructureViewFactory
 import com.intellij.navigation.ItemPresentation
 import com.intellij.openapi.editor.Editor
+import com.intellij.openapi.fileEditor.OpenFileDescriptor
 import com.intellij.psi.NavigatablePsiElement
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiFile
@@ -71,12 +72,13 @@ private class KawaStructureRootElement(
     }
 
     override fun navigate(requestFocus: Boolean) {
-        file.navigate(requestFocus)
+        val virtualFile = file.virtualFile ?: return
+        OpenFileDescriptor(file.project, virtualFile, 0).navigate(requestFocus)
     }
 
-    override fun canNavigate(): Boolean = file.canNavigate()
+    override fun canNavigate(): Boolean = file.virtualFile != null
 
-    override fun canNavigateToSource(): Boolean = file.canNavigateToSource()
+    override fun canNavigateToSource(): Boolean = file.virtualFile != null
 }
 
 /**
@@ -108,14 +110,24 @@ private class KawaDefiningFormElement(
     override fun getChildren(): Array<TreeElement> = emptyArray()
 
     override fun navigate(requestFocus: Boolean) {
-        form.containingFile?.navigate(requestFocus)
+        // Navigate directly to the defining form element, not just the containing file.
+        val navigatable = form as? NavigatablePsiElement
+        if (navigatable != null && navigatable.canNavigate()) {
+            navigatable.navigate(requestFocus)
+            return
+        }
+
+        val virtualFile = form.containingFile?.virtualFile ?: return
+        OpenFileDescriptor(form.project, virtualFile, form.textOffset).navigate(requestFocus)
     }
 
     override fun canNavigate(): Boolean =
-        form.containingFile?.canNavigate() ?: false
+        (form as? NavigatablePsiElement)?.canNavigate()
+            ?: (form.containingFile?.virtualFile != null && form.textOffset >= 0)
 
     override fun canNavigateToSource(): Boolean =
-        form.containingFile?.canNavigateToSource() ?: false
+        (form as? NavigatablePsiElement)?.canNavigateToSource()
+            ?: (form.containingFile?.virtualFile != null && form.textOffset >= 0)
 
     companion object {
         fun extractName(head: String, forms: List<KawaForm>): String? {

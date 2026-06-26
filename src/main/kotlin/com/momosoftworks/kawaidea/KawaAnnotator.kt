@@ -48,26 +48,27 @@ class KawaAnnotator : Annotator {
     private fun annotateSymbol(symbol: PsiElement, holder: AnnotationHolder) {
         val text = symbol.text
         val start = symbol.textRange.startOffset
-        val colons = text.count { it == ':' }
+        val classification = KawaSemantic.classifyColonSymbol(text)
 
-        when {
-            // keyword argument label: `name:` `version:`
-            colons == 1 && text.length > 1 && text.endsWith(":") ->
-                mark(holder, symbol.textRange, KawaColors.KEYWORD_ARG)
+        when (classification.kind) {
+            ColonKind.KEYWORD,
+            ColonKind.HASH_KEYWORD -> mark(holder, symbol.textRange, KawaColors.KEYWORD_ARG)
 
-            // leading-colon method access: `:setUnlocalizedName`
-            colons == 1 && text.length > 1 && text.startsWith(":") ->
-                mark(holder, symbol.textRange, KawaColors.METHOD_CALL)
+            ColonKind.LEADING_RECEIVER_MEMBER -> mark(holder, symbol.textRange, KawaColors.METHOD_CALL)
 
-            // interop `pkg.Class:method` -> split into class part + method part
-            colons == 1 -> {
-                val i = text.indexOf(':')
+            ColonKind.JAVA_FQN_MEMBER,
+            ColonKind.SHORT_CLASS_MEMBER -> {
+                val i = classification.colonIndex
                 mark(holder, TextRange(start, start + i), KawaColors.CLASS_REF)
                 mark(holder, TextRange(start + i + 1, symbol.textRange.endOffset), KawaColors.METHOD_CALL)
             }
 
-            // bare fully-qualified class name: `net.minecraft.item.Item`
-            KawaNames.isClassFqn(text) -> mark(holder, symbol.textRange, KawaColors.CLASS_REF)
+            ColonKind.NONE -> {
+                if (KawaNames.isClassFqn(text)) mark(holder, symbol.textRange, KawaColors.CLASS_REF)
+            }
+
+            ColonKind.NAMESPACE_OR_NAMED_PART,
+            ColonKind.MULTI_COLON_SYMBOL -> Unit
         }
     }
 

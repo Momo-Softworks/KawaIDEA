@@ -16,6 +16,8 @@ import com.momosoftworks.kawaidea.psi.KawaTypes;
 
 WHITE_SPACE=[ \t\f\r\n]+
 LINE_COMMENT=";"[^\r\n]*
+SHEBANG="#!"[^\r\n]*
+DATUM_COMMENT_MARKER="#;"
 BLOCK_COMMENT="#|"~"|#"
 
 STRING=\"([^\\\"]|\\[^])*\"?
@@ -27,13 +29,16 @@ NUMBER=[+-]?[0-9][0-9a-fA-F.eE+\-/x]*
 // delimiters, string/quote markers, or a comment start. This deliberately
 // includes ':', '.', '-', '>', etc. so interop names like
 // com.momosoftworks.kawacraft.KawaCraftAPI:callHandler lex as ONE symbol.
+// Updated to support keyword symbols like #:foo and datum comment marker #;.
 SYMBOL=[^ \t\f\r\n()\[\]{}\"';`,]+
 
 %%
 
 <YYINITIAL> {
   {WHITE_SPACE}      { return TokenType.WHITE_SPACE; }
+  {SHEBANG}          { return KawaTypes.LINE_COMMENT; }
   {LINE_COMMENT}     { return KawaTypes.LINE_COMMENT; }
+  {DATUM_COMMENT_MARKER} { return KawaTypes.SYMBOL; }
   {BLOCK_COMMENT}    { return KawaTypes.BLOCK_COMMENT; }
 
   "#("               { return KawaTypes.HASH_LPAREN; }
