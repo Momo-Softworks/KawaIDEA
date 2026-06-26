@@ -15,12 +15,12 @@ class KawaFormatterTest : BasePlatformTestCase() {
 
     private fun reformat(before: String): String {
         myFixture.configureByText(KawaFileType, before)
+        val doc = myFixture.editor.document
         WriteCommandAction.runWriteCommandAction(project) {
             CodeStyleManager.getInstance(project).reformat(myFixture.file)
         }
-        PsiDocumentManager.getInstance(project).commitAllDocuments()
-        // Read from the document, not the PSI file — the PSI text may be stale.
-        return myFixture.editor.document.text
+        PsiDocumentManager.getInstance(project).commitDocument(doc)
+        return doc.text
     }
 
     /** Normalize line endings for cross-platform test stability. */
