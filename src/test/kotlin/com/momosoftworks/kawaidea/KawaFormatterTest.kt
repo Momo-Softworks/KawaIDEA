@@ -6,12 +6,15 @@ import com.intellij.psi.codeStyle.CodeStyleManager
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
 
 /**
- * Formatter smoke tests: verify the formatter changes indent and is idempotent.
+ * Headless reformat tests for the hybrid indentation (M3, ALIGN_ARGUMENTS = true):
+ * special forms indent their body +2; function calls and data lists align under
+ * the first argument/element. Includes a multi-level case to prove indentation
+ * accumulates through nesting.
  */
 class KawaFormatterTest : BasePlatformTestCase() {
 
-    private fun reformat(text: String): String {
-        myFixture.configureByText(KawaFileType, text)
+    private fun reformat(before: String): String {
+        myFixture.configureByText(KawaFileType, before)
         WriteCommandAction.runWriteCommandAction(project) {
             CodeStyleManager.getInstance(project).reformat(myFixture.file)
         }
@@ -19,49 +22,39 @@ class KawaFormatterTest : BasePlatformTestCase() {
         return myFixture.file.text
     }
 
-    /** Reformatting twice produces the same result. */
-    private fun assertIdempotent(input: String) {
-        val first = reformat(input)
-        val second = reformat(first)
-        assertEquals("formatter should be idempotent", first, second)
+    /** Normalize line endings for cross-platform test stability. */
+    private fun norm(s: String) = s.replace("\r\n", "\n").replace("\r", "\n")
+
+    private fun assertReformat(expected: String, before: String) {
+        val actual = norm(reformat(before))
+        val exp = norm(expected)
+        System.err.println("BEFORE: ${before.replace("\n", "\\n")}")
+        System.err.println("ACTUAL: ${actual.replace("\n", "\\n")}")
+        System.err.println("EXPECT: ${exp.replace("\n", "\\n")}")
+        assertEquals(exp, actual)
     }
 
-    /** Reformatting does something (output differs from input if input is messy). */
-    private fun assertChanges(before: String) {
-        val after = reformat(before)
-        if (before == after) {
-            System.err.println("WARNING: reformat did not change input. Input may already be canonical.")
-        }
-        // Not a hard assertion — some inputs are already canonical.
-    }
-
+    // SPECIAL: body indents a fixed +2.
     fun testDefineBodyIndentsTwo() {
-        val input = "(define (f x)\n(+ x 1))"
-        assertChanges(input)
-        assertIdempotent(input)
+        assertReformat("(define (f x)\n  (+ x 1))", "(define (f x)\n(+ x 1))")
     }
 
     fun testLetBodyIndentsTwo() {
-        val input = "(let ((x 1))\n     (+ x 1))"
-        assertChanges(input)
-        assertIdempotent(input)
+        assertReformat("(let ((x 1))\n  (+ x 1))", "(let ((x 1))\n     (+ x 1))")
     }
 
+    // Nesting must accumulate: inner body is +2 from the inner form, not the outer.
     fun testSpecialNestingAccumulates() {
-        val input = "(when a\n(when b\n(foo)))"
-        assertChanges(input)
-        assertIdempotent(input)
+        assertReformat("(when a\n  (when b\n    (foo)))", "(when a\n(when b\n(foo)))")
     }
 
+    // CALL: arguments align under the first argument.
     fun testCallAlignsArgsUnderFirstArg() {
-        val input = "(foo bar\n  baz)"
-        assertChanges(input)
-        assertIdempotent(input)
+        assertReformat("(foo bar\n     baz)", "(foo bar\n  baz)")
     }
 
+    // DATA: elements align under the first element (head is not a symbol).
     fun testDataListAlignsUnderFirstElement() {
-        val input = "((a)\n        (b))"
-        assertChanges(input)
-        assertIdempotent(input)
+        assertReformat("((a)\n (b))", "((a)\n        (b))")
     }
 }
