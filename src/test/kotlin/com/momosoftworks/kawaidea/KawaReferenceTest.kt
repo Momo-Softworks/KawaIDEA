@@ -11,7 +11,7 @@ import com.intellij.testFramework.fixtures.BasePlatformTestCase
 class KawaReferenceTest : BasePlatformTestCase() {
 
     private fun resolveAtCaret(scm: String): Any? {
-        myFixture.configureByText(KawaFileType, scm)
+        myFixture.configureByText("a.scm", scm)
         return myFixture.getReferenceAtCaretPosition()?.resolve()
     }
 
@@ -51,7 +51,7 @@ class KawaReferenceTest : BasePlatformTestCase() {
     }
 
     fun testKeywordArgIsNotAReference() {
-        myFixture.configureByText(KawaFileType, "(item! display-na<caret>me: \"x\")")
+        myFixture.configureByText("a.scm", "(item! display-na<caret>me: \"x\")")
         assertNull(myFixture.getReferenceAtCaretPosition())
     }
 }

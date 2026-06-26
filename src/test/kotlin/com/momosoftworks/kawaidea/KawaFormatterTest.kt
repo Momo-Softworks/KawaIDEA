@@ -19,7 +19,8 @@ class KawaFormatterTest : BasePlatformTestCase() {
             CodeStyleManager.getInstance(project).reformat(myFixture.file)
         }
         PsiDocumentManager.getInstance(project).commitAllDocuments()
-        return myFixture.file.text
+        // Read from the document, not the PSI file — the PSI text may be stale.
+        return myFixture.editor.document.text
     }
 
     /** Normalize line endings for cross-platform test stability. */
