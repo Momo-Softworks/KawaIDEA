@@ -1,0 +1,45 @@
+<idea-plugin>
+    <id>com.momosoftworks.kawaidea</id>
+    <name>Kawa Scheme</name>
+    <vendor email="samuel@thewilley.family" url="https://momosoftworks.com">Momo Softworks</vendor>
+
+    <description><![CDATA[
+        Language support for <b>Kawa</b> (JVM Scheme).<br/>
+        M1: file type, lexer, parser/PSI, syntax highlighting, brace matching.<br/>
+        Planned: Emacs-style indentation (M3), Scheme&#8594;Java navigation (M4),
+        completion (M5).
+    ]]></description>
+
+    <!-- com.intellij.java is required so M4 can resolve interop FQNs into Java PSI. -->
+    <depends>com.intellij.modules.platform</depends>
+    <depends>com.intellij.java</depends>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <fileType
+            name="Kawa Scheme"
+            implementationClass="com.momosoftworks.kawaidea.KawaFileType"
+            fieldName="INSTANCE"
+            language="Kawa"
+            extensions="scm"/>
+        <lang.parserDefinition
+            language="Kawa"
+            implementationClass="com.momosoftworks.kawaidea.KawaParserDefinition"/>
+        <lang.syntaxHighlighterFactory
+            language="Kawa"
+            implementationClass="com.momosoftworks.kawaidea.KawaSyntaxHighlighterFactory"/>
+        <lang.braceMatcher
+            language="Kawa"
+            implementationClass="com.momosoftworks.kawaidea.KawaPairedBraceMatcher"/>
+        <annotator
+            language="Kawa"
+            implementationClass="com.momosoftworks.kawaidea.KawaAnnotator"/>
+        <lang.formatter
+            language="Kawa"
+            implementationClass="com.momosoftworks.kawaidea.KawaFormattingModelBuilder"/>
+        <langCodeStyleSettingsProvider
+            implementation="com.momosoftworks.kawaidea.KawaCodeStyleSettingsProvider"/>
+        <psi.referenceContributor
+            language="Kawa"
+            implementation="com.momosoftworks.kawaidea.KawaReferenceContributor"/>
+    </extensions>
+</idea-plugin>

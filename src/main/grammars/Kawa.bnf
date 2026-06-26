@@ -1,0 +1,53 @@
+{
+  parserClass="com.momosoftworks.kawaidea.parser.KawaParser"
+  parserUtilClass="com.intellij.lang.parser.GeneratedParserUtilBase"
+
+  extends="com.intellij.extapi.psi.ASTWrapperPsiElement"
+
+  psiClassPrefix="Kawa"
+  psiImplClassSuffix="Impl"
+  psiPackage="com.momosoftworks.kawaidea.psi"
+  psiImplPackage="com.momosoftworks.kawaidea.psi.impl"
+
+  elementTypeHolderClass="com.momosoftworks.kawaidea.psi.KawaTypes"
+  elementTypeClass="com.momosoftworks.kawaidea.psi.KawaElementType"
+  tokenTypeClass="com.momosoftworks.kawaidea.psi.KawaTokenType"
+
+  // Left-hand names become the IElementType constants in KawaTypes; the JFlex
+  // lexer returns these same constants. Right-hand text is the display name.
+  tokens=[
+    LPAREN='('
+    RPAREN=')'
+    LBRACKET='['
+    RBRACKET=']'
+    HASH_LPAREN='#('
+    QUOTE="'"
+    QUASIQUOTE="`"
+    UNQUOTE=","
+    UNQUOTE_SPLICING=",@"
+    STRING='string'
+    NUMBER='number'
+    BOOLEAN='boolean'
+    CHARACTER='character'
+    SYMBOL='symbol'
+    LINE_COMMENT='line_comment'
+    BLOCK_COMMENT='block_comment'
+  ]
+}
+
+// The whole language: a file is a sequence of s-expressions. That's it.
+kawaFile ::= form*
+
+form ::= list | vector | quoted | atom
+
+list ::= '(' form* ')'
+       | '[' form* ']'
+
+vector ::= '#(' form* ')'
+
+quoted ::= quote_prefix form
+private quote_prefix ::= QUOTE | QUASIQUOTE | UNQUOTE | UNQUOTE_SPLICING
+
+atom ::= SYMBOL | STRING | NUMBER | BOOLEAN | CHARACTER {
+  mixin="com.momosoftworks.kawaidea.psi.KawaAtomMixin"
+}
