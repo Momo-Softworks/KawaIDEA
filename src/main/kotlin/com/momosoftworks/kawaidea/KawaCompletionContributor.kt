@@ -79,29 +79,41 @@ private class KawaCompletionProvider : CompletionProvider<CompletionParameters>(
         val project = position.project
         val scope = GlobalSearchScope.allScope(project)
         val facade = JavaPsiFacade.getInstance(project)
+        val shortNames = PsiShortNamesCache.getInstance(project)
 
         // Split into package prefix and class-name prefix.
         val lastDot = prefix.lastIndexOf('.')
         val pkgPrefix = if (lastDot > 0) prefix.substring(0, lastDot) else ""
         val classPrefix = prefix.substring(lastDot + 1)
+        val endsWithDot = prefix.endsWith(".")
 
-        // 1. Classes whose short name starts with the class prefix.
-        if (classPrefix.isNotEmpty()) {
-            // unqualified: search all classes by short name
-            for (cls in PsiShortNamesCache.getInstance(project)
-                .getClassesByName(classPrefix + "*", scope)) {
+        // 1. Classes whose short name matches, filtered by package.
+        //    When the prefix ends with a dot, show ALL classes in that package.
+        if (classPrefix.isNotEmpty() || endsWithDot) {
+            val searchPrefix = if (endsWithDot) "" else classPrefix
+            val allClasses = if (searchPrefix.isNotEmpty()) {
+                shortNames.getClassesByName(searchPrefix + "*", scope).toList()
+            } else {
+                // Prefix ends with dot — get classes in the specific package.
+                val pkg = facade.findPackage(pkgPrefix)
+                if (pkg != null) {
+                    pkg.getClasses(scope).toList()
+                } else {
+                    // Package not indexed (e.g. build-directory classes).
+                    // Fall back: search all classes with this FQN prefix.
+                    facade.findClasses(pkgPrefix, scope).toList()
+                }
+            }
+            for (cls in allClasses) {
                 val fqn = cls.qualifiedName ?: continue
                 if (pkgPrefix.isEmpty() || fqn.startsWith(pkgPrefix + ".")) {
-                    result.addElement(
-                        classElement(fqn, cls.isInterface)
-                    )
+                    result.addElement(classElement(fqn, cls.isInterface))
                 }
             }
         }
 
-        // 2. Sub-packages of the package prefix (only when pkgPrefix is complete
-        //    enough to resolve).
-        if (classPrefix.isEmpty() || prefix.endsWith(".")) {
+        // 2. Sub-packages of the package prefix.
+        if (classPrefix.isEmpty() || endsWithDot) {
             val pkg = facade.findPackage(pkgPrefix.ifEmpty { "" })
             if (pkg != null) {
                 for (sub in pkg.subPackages) {
