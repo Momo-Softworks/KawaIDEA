@@ -187,11 +187,15 @@ private class KawaCompletionProvider : CompletionProvider<CompletionParameters>(
         position: PsiElement,
         result: CompletionResultSet,
     ) {
+        val project = position.project
+        val scope = GlobalSearchScope.allScope(project)
         val collected = mutableSetOf<String>()
 
         // Walk the file's PSI tree to find locally bound names.
-        val file = position.containingFile as? KawaFile ?: return
-        collectLocalBindings(file, position, collected)
+        val file = position.containingFile as? KawaFile
+        if (file != null) {
+            collectLocalBindings(file, position, collected)
+        }
 
         // R7RS small language + Kawa built-ins
         val builtins = R7RS_BUILTINS + KAWA_BUILTINS + KawaForms.SPECIAL_FORMS
@@ -209,6 +213,24 @@ private class KawaCompletionProvider : CompletionProvider<CompletionParameters>(
                     .withIcon(icon)
                     .withTypeText(if (collected.contains(name)) "local" else "builtin")
             )
+        }
+
+        // Unqualified Java class names — search the short-names index.
+        // This is how GameRegistry works without typing cpw.mods.fml.common.registry.
+        if (prefix.isNotEmpty()) {
+            val classes = PsiShortNamesCache.getInstance(project)
+                .getClassesByName(prefix + "*", scope)
+            for (cls in classes.take(40)) {
+                val fqn = cls.qualifiedName ?: continue
+                val simpleName = fqn.substringAfterLast('.')
+                val pkg = fqn.substringBeforeLast('.', "")
+                result.addElement(
+                    LookupElementBuilder.create(simpleName)
+                        .withIcon(classIcon(cls.isInterface))
+                        .withTypeText(if (cls.isInterface) "interface" else "class")
+                        .withTailText("  ($pkg)", true)
+                )
+            }
         }
     }
 
