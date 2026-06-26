@@ -3,30 +3,36 @@ package com.momosoftworks.kawaidea
 import com.intellij.openapi.command.WriteCommandAction
 import com.intellij.psi.codeStyle.CodeStyleManager
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
+import com.momosoftworks.kawaidea.KawaFileType
 
 /**
- * Headless reformat tests for the hybrid indentation (M3, ALIGN_ARGUMENTS = true):
- * special forms indent their body +2; function calls and data lists align under
- * the first argument/element. Includes a multi-level case to prove indentation
- * accumulates through nesting.
+ * Headless reformat tests for the hybrid indentation (M3, ALIGN_ARGUMENTS = true).
  */
 class KawaFormatterTest : BasePlatformTestCase() {
 
     private fun reformat(before: String): String {
-        myFixture.configureByText("a.scm", before)
+        myFixture.configureByText(KawaFileType, before)
         WriteCommandAction.runWriteCommandAction(project) {
             CodeStyleManager.getInstance(project).reformat(myFixture.file)
         }
         return myFixture.file.text
+            .lines()
+            .joinToString("\n") { it.trimEnd() }
     }
 
     private fun assertReformat(expected: String, before: String) {
+        val expectedNorm = expected.lines().joinToString("\n") { it.trimEnd() }
         val actual = reformat(before)
-        // Print both so CI logs show the diff when it fails.
-        println("BEFORE:  ${before.replace("\n", "\\n")}")
-        println("ACTUAL:  ${actual.replace("\n", "\\n")}")
-        println("EXPECT:  ${expected.replace("\n", "\\n")}")
-        assertEquals(expected, actual)
+        if (expectedNorm != actual) {
+            println("--- BEFORE ---")
+            println(before)
+            println("--- EXPECTED ---")
+            println(expectedNorm)
+            println("--- ACTUAL ---")
+            println(actual)
+            println("--- END ---")
+        }
+        assertEquals(expectedNorm, actual)
     }
 
     fun testDefineBodyIndentsTwo() {
