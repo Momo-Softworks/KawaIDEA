@@ -22,7 +22,7 @@
             implementationClass="com.momosoftworks.kawaidea.KawaFileType"
             fieldName="INSTANCE"
             language="Kawa"
-            extensions="scm"/>
+            extensions="scm;sld"/>
         <lang.parserDefinition
             language="Kawa"
             implementationClass="com.momosoftworks.kawaidea.KawaParserDefinition"/>
@@ -46,5 +46,10 @@
         <completion.contributor
             language="Kawa"
             implementationClass="com.momosoftworks.kawaidea.KawaCompletionContributor"/>
+        <lang.psiStructureViewFactory
+            language="Kawa"
+            implementationClass="com.momosoftworks.kawaidea.KawaStructureViewFactory"/>
+        <configurationType
+            implementation="com.momosoftworks.kawaidea.KawaReplConfigurationType"/>
     </extensions>
 </idea-plugin>

@@ -42,6 +42,50 @@ class KawaCompletionContributor : CompletionContributor() {
     }
 }
 
+// =====================================================================
+//  Public routing logic — extracted for testability.
+// =====================================================================
+
+/** How a completion prefix should be handled. */
+enum class CompletionMode {
+    /** pkg.Class: — Java member completion. */
+    JAVA_MEMBER,
+    /** pkg.Class or pkg. — Java class/package completion. */
+    DOT_PREFIX,
+    /** Plain symbol — Scheme builtins + locals + Java unqualified classes. */
+    SCHEME_SYMBOL,
+}
+
+/**
+ * Classify a completion prefix into the correct [CompletionMode].
+ * Visible for testing.
+ */
+fun classifyPrefix(prefix: String): CompletionMode = when {
+    ':' in prefix && prefix.indexOf(':') < prefix.length -> CompletionMode.JAVA_MEMBER
+    '.' in prefix                                        -> CompletionMode.DOT_PREFIX
+    else                                                 -> CompletionMode.SCHEME_SYMBOL
+}
+
+/**
+ * Find Java class short names matching [prefix] via [PsiShortNamesCache].
+ * Does NOT use `getClassesByName(name + "*")` — that method needs an exact
+ * short name.  Instead we scan `getAllClassNames()` and filter.
+ *
+ * Visible for testing.
+ */
+fun matchingClassShortNames(prefix: String, project: com.intellij.openapi.project.Project): List<String> {
+    if (prefix.length < 2) return emptyList()
+    val cache = PsiShortNamesCache.getInstance(project)
+    return cache.allClassNames
+        .filter { it.startsWith(prefix) }
+        .take(50)
+        .toList()
+}
+
+// =====================================================================
+//  Provider
+// =====================================================================
+
 private class KawaCompletionProvider : CompletionProvider<CompletionParameters>() {
 
     override fun addCompletions(
@@ -52,19 +96,43 @@ private class KawaCompletionProvider : CompletionProvider<CompletionParameters>(
         val position = params.position
         val offset = params.offset
 
-        // ---- determine the prefix ------------------------------------------------
-        // If the cursor sits on or just after an ATOM, use that atom's text.
+        // -- determine the prefix -----------------------------------------------
         val atom = ancestorAtom(position) ?: parentAtom(position)
         val prefix = atomPrefix(atom, offset) ?: ""
 
-        // ---- route completion ----------------------------------------------------
-        if (':' in prefix && prefix.indexOf(':') < prefix.length) {
-            completeJavaMembers(prefix, position, result)
-        } else if ('.' in prefix) {
+        // -- context-sensitive override ----------------------------------------
+        // Some Kawa forms expect Java class names in specific argument positions,
+        // regardless of whether the prefix contains dots or colons.
+        val contextHead = contextListHead(position)
+        if (contextHead in CLASS_CONTEXT_FORMS && prefix.isNotEmpty()) {
+            // Force class completion for e.g. (invoke-static |, (instance? obj |, etc.
             completeDotPrefix(prefix, position, result)
-        } else {
             completeSchemeSymbols(prefix, position, result)
+            return
         }
+
+        // -- route --------------------------------------------------------------
+        when (classifyPrefix(prefix)) {
+            CompletionMode.JAVA_MEMBER  -> completeJavaMembers(prefix, position, result)
+            CompletionMode.DOT_PREFIX   -> completeDotPrefix(prefix, position, result)
+            CompletionMode.SCHEME_SYMBOL -> completeSchemeSymbols(prefix, position, result)
+        }
+    }
+
+    /**
+     * Return the head symbol of the nearest parent list, or null.
+     * E.g. for `(invoke-static |` returns `"invoke-static"`.
+     */
+    private fun contextListHead(position: PsiElement): String? {
+        var parent = position.parent
+        for (i in 1..5) {
+            if (parent == null) return null
+            if (parent is KawaList) {
+                return parent.formList.firstOrNull()?.atom?.firstChild?.text
+            }
+            parent = parent.parent
+        }
+        return null
     }
 
     // -----------------------------------------------------------------
@@ -79,7 +147,6 @@ private class KawaCompletionProvider : CompletionProvider<CompletionParameters>(
         val project = position.project
         val scope = GlobalSearchScope.allScope(project)
         val facade = JavaPsiFacade.getInstance(project)
-        val shortNames = PsiShortNamesCache.getInstance(project)
 
         // Split into package prefix and class-name prefix.
         val lastDot = prefix.lastIndexOf('.')
@@ -90,10 +157,7 @@ private class KawaCompletionProvider : CompletionProvider<CompletionParameters>(
         // 1. Classes whose short name matches, filtered by package.
         //    When the prefix ends with a dot, show ALL classes in that package.
         if (classPrefix.isNotEmpty() || endsWithDot) {
-            val searchPrefix = if (endsWithDot) "" else classPrefix
-            val allClasses = if (searchPrefix.isNotEmpty()) {
-                shortNames.getClassesByName(searchPrefix + "*", scope).toList()
-            } else {
+            val allClasses = if (endsWithDot) {
                 // Prefix ends with dot — get classes in the specific package.
                 val pkg = facade.findPackage(pkgPrefix)
                 if (pkg != null) {
@@ -103,6 +167,16 @@ private class KawaCompletionProvider : CompletionProvider<CompletionParameters>(
                     // Fall back: search all classes with this FQN prefix.
                     facade.findClasses(pkgPrefix, scope).toList()
                 }
+            } else {
+                // Non-empty class prefix — use getAllClassNames (exact API, no wildcards).
+                val cache = PsiShortNamesCache.getInstance(project)
+                cache.allClassNames
+                    .filter { it.startsWith(classPrefix) }
+                    .take(60)
+                    .mapNotNull { name ->
+                        val classes = cache.getClassesByName(name, scope)
+                        classes.firstOrNull()
+                    }
             }
             for (cls in allClasses) {
                 val fqn = cls.qualifiedName ?: continue
@@ -120,7 +194,6 @@ private class KawaCompletionProvider : CompletionProvider<CompletionParameters>(
                     result.addElement(packageElement(sub.qualifiedName))
                 }
             } else if (pkgPrefix.isEmpty()) {
-                // Offer root-level packages (slow path — limit to common JVM pkgs).
                 for (root in listOf("java", "javax", "com", "org", "net", "gnu", "kawa")) {
                     result.addElement(packageElement(root))
                 }
@@ -149,18 +222,24 @@ private class KawaCompletionProvider : CompletionProvider<CompletionParameters>(
         val cls: PsiClass? = resolveClass(classPart, facade, scope)
 
         if (cls == null) {
-            // Offer matching unqualified class names as candidates so the user
-            // can complete the class part before adding a member.
-            val candidates = PsiShortNamesCache.getInstance(project)
-                .getClassesByName(classPart + "*", scope)
-            for (c in candidates.take(30)) {
-                val fqn = c.qualifiedName ?: continue
-                result.addElement(
-                    LookupElementBuilder.create(fqn + ":")
-                        .withIcon(classIcon(c.isInterface))
-                        .withTypeText("class")
-                        .withTailText(" → member")
-                )
+            // Offer matching unqualified class names so the user can complete
+            // the class part before picking a member.
+            val cache = PsiShortNamesCache.getInstance(project)
+            val matching = cache.allClassNames
+                .filter { it.startsWith(classPart) }
+                .take(30)
+            for (shortName in matching) {
+                val candidates = cache.getClassesByName(shortName, scope)
+                for (c in candidates) {
+                    val fqn = c.qualifiedName ?: continue
+                    result.addElement(
+                        LookupElementBuilder.create(fqn + ":")
+                            .withPresentableText(shortName)
+                            .withIcon(classIcon(c.isInterface))
+                            .withTypeText("class")
+                            .withTailText(" → member")
+                    )
+                }
             }
             return
         }
@@ -179,7 +258,7 @@ private class KawaCompletionProvider : CompletionProvider<CompletionParameters>(
     }
 
     // -----------------------------------------------------------------
-    //  Scheme symbols
+    //  Scheme symbols + unqualified Java classes
     // -----------------------------------------------------------------
 
     private fun completeSchemeSymbols(
@@ -200,6 +279,17 @@ private class KawaCompletionProvider : CompletionProvider<CompletionParameters>(
         // R7RS small language + Kawa built-ins
         val builtins = R7RS_BUILTINS + KAWA_BUILTINS + KawaForms.SPECIAL_FORMS
 
+        // Templates (snippets) — shown before builtins so they surface first.
+        for ((name, skeleton) in KAWA_TEMPLATES) {
+            if (!prefixMatches(prefix, name)) continue
+            result.addElement(
+                LookupElementBuilder.create(name)
+                    .withIcon(AllIcons.Nodes.Template)
+                    .withTypeText("snippet")
+                    .withTailText("  $skeleton", true)
+            )
+        }
+
         for (name in (collected + builtins).sorted()) {
             if (!prefixMatches(prefix, name)) continue
             val icon = when {
@@ -215,21 +305,23 @@ private class KawaCompletionProvider : CompletionProvider<CompletionParameters>(
             )
         }
 
-        // Unqualified Java class names — search the short-names index.
-        // This is how GameRegistry works without typing cpw.mods.fml.common.registry.
-        if (prefix.isNotEmpty()) {
-            val classes = PsiShortNamesCache.getInstance(project)
-                .getClassesByName(prefix + "*", scope)
-            for (cls in classes.take(40)) {
-                val fqn = cls.qualifiedName ?: continue
-                val simpleName = fqn.substringAfterLast('.')
-                val pkg = fqn.substringBeforeLast('.', "")
-                result.addElement(
-                    LookupElementBuilder.create(simpleName)
-                        .withIcon(classIcon(cls.isInterface))
-                        .withTypeText(if (cls.isInterface) "interface" else "class")
-                        .withTailText("  ($pkg)", true)
-                )
+        // Unqualified Java class names.
+        // getAllClassNames() returns exact short names — no wildcards needed.
+        if (prefix.length >= 2) {
+            val cache = PsiShortNamesCache.getInstance(project)
+            for (shortName in cache.allClassNames) {
+                if (!shortName.startsWith(prefix)) continue
+                val classes = cache.getClassesByName(shortName, scope)
+                for (cls in classes.take(3)) { // same short name → multiple JARs
+                    val fqn = cls.qualifiedName ?: continue
+                    val pkg = fqn.substringBeforeLast('.', "")
+                    result.addElement(
+                        LookupElementBuilder.create(shortName)
+                            .withIcon(classIcon(cls.isInterface))
+                            .withTypeText(if (cls.isInterface) "interface" else "class")
+                            .withTailText("  ($pkg)", true)
+                    )
+                }
             }
         }
     }
@@ -238,7 +330,6 @@ private class KawaCompletionProvider : CompletionProvider<CompletionParameters>(
     //  Helpers
     // -----------------------------------------------------------------
 
-    /** Walk up from [position] collecting `define`, `lambda`, and `let` bindings. */
     private fun collectLocalBindings(
         file: KawaFile,
         position: PsiElement,
@@ -246,14 +337,12 @@ private class KawaCompletionProvider : CompletionProvider<CompletionParameters>(
     ) {
         val lists = PsiTreeUtil.collectElementsOfType(file, KawaList::class.java)
         for (list in lists) {
-            // Look at top-level and nested lists; only consider those before position.
             if (list.textOffset >= position.textOffset) continue
             val forms = list.formList
             val head = forms.firstOrNull()?.atom?.firstChild?.text ?: continue
 
             when {
                 head in KawaForms.DEFINING_FORMS -> {
-                    // (define name ...) or (define (name args) ...)
                     val second = forms.getOrNull(1) ?: continue
                     val nameLeaf = second.atom?.firstChild
                     val name = nameLeaf?.text
@@ -265,7 +354,6 @@ private class KawaCompletionProvider : CompletionProvider<CompletionParameters>(
                     }
                 }
                 head == "lambda" || head == "case-lambda" -> {
-                    // (lambda (args) body)
                     val argList = forms.getOrNull(1)?.list ?: continue
                     for (argForm in argList.formList) {
                         argForm.atom?.firstChild?.text?.let { collected.add(it) }
@@ -284,39 +372,49 @@ private class KawaCompletionProvider : CompletionProvider<CompletionParameters>(
         }
     }
 
+    /**
+     * Resolve a possibly-unqualified class name.  Tries:
+     * 1. Fully-qualified name
+     * 2. Exact short-name match
+     * 3. Common Java packages (java.lang, java.util, java.io)
+     * 4. If the name is 2+ chars, prefix search via getAllClassNames
+     */
     private fun resolveClass(name: String, facade: JavaPsiFacade, scope: GlobalSearchScope): PsiClass? {
         // 1. Fully qualified
         facade.findClass(name, scope)?.let { return it }
-        // 2. Unqualified — search short names cache
-        val matches = PsiShortNamesCache.getInstance(facade.project)
-            .getClassesByName(name, scope)
-        if (matches.size == 1) return matches[0]
-        // 3. Try common Java packages
+        // 2. Unqualified — exact short name match
+        val cache = PsiShortNamesCache.getInstance(facade.project)
+        val exactMatches = cache.getClassesByName(name, scope)
+        if (exactMatches.size == 1) return exactMatches[0]
+        // 3. Common Java packages
         for (pkg in listOf("java.lang", "java.util", "java.io")) {
             facade.findClass("$pkg.$name", scope)?.let { return it }
+        }
+        // 4. Partial / prefix match via getAllClassNames
+        if (name.length >= 2) {
+            val matching = cache.allClassNames
+                .filter { it.startsWith(name) }
+                .take(5)
+            for (shortName in matching) {
+                val candidates = cache.getClassesByName(shortName, scope)
+                if (candidates.isNotEmpty()) return candidates[0]
+            }
         }
         return null
     }
 
     private fun prefixMatches(prefix: String, name: String): Boolean {
         if (prefix.isEmpty()) return true
-        // Case-sensitive prefix match (Java is case-sensitive).
         return name.startsWith(prefix)
     }
 
-    /** The atom that is an ancestor of the PSI element at the cursor. */
     private fun ancestorAtom(position: PsiElement): KawaAtom? =
         PsiTreeUtil.getParentOfType(position, KawaAtom::class.java)
 
-    /**
-     * When the cursor is next to (not inside) an atom — e.g. between forms —
-     * look for an atom just before the cursor.
-     */
     private fun parentAtom(position: PsiElement, state: Int = 0): KawaAtom? {
         val parent = position.parent ?: return null
         if (parent is KawaAtom) return parent
         if (parent is KawaForm) {
-            // Return the form's atom; fallback to sibling search.
             return parent.atom ?: (parent.prevSibling as? KawaForm)?.atom
             ?: (parent.parent?.prevSibling as? KawaForm)?.atom
         }
@@ -324,16 +422,10 @@ private class KawaCompletionProvider : CompletionProvider<CompletionParameters>(
             val prevForm = position.prevSibling as? KawaForm
             return prevForm?.atom
         }
-        // Guard against infinite loop.
         if (state > 10) return null
         return parentAtom(parent, state + 1)
     }
 
-    /**
-     * Extract the completion prefix from an atom.
-     * If [offset] falls inside the atom, return the text up to that point;
-     * otherwise return the entire atom text.
-     */
     private fun atomPrefix(atom: KawaAtom?, offset: Int): String? {
         if (atom == null) return null
         val text = atom.text
@@ -367,7 +459,6 @@ private class KawaCompletionProvider : CompletionProvider<CompletionParameters>(
             p.type.presentableText
         }
         val returnType = method.returnType?.presentableText ?: "void"
-
         val displayName = cls.qualifiedName + ":" + method.name
         val presentable = method.name
 
@@ -380,7 +471,6 @@ private class KawaCompletionProvider : CompletionProvider<CompletionParameters>(
     private fun fieldElement(cls: PsiClass, field: com.intellij.psi.PsiField): LookupElementBuilder {
         val static = field.hasModifierProperty(PsiModifier.STATIC)
         val type = field.type.presentableText
-
         val displayName = cls.qualifiedName + ":" + field.name
         val presentable = field.name
 
@@ -394,7 +484,13 @@ private class KawaCompletionProvider : CompletionProvider<CompletionParameters>(
         if (isInterface) AllIcons.Nodes.Interface else AllIcons.Nodes.Class
 
     companion object {
-        // R7RS small language procedures (as symbols, not special forms).
+        /** Kawa special forms where argument positions expect Java class names. */
+        val CLASS_CONTEXT_FORMS = setOf(
+            "invoke-static", "invoke-special",
+            "instance?", "as",
+            "define-simple-class", "define-class",
+        )
+
         val R7RS_BUILTINS = setOf(
             "+", "-", "*", "/", "=", "<", ">", "<=", ">=",
             "abs", "append", "apply", "assoc", "assq", "assv",
@@ -434,6 +530,15 @@ private class KawaCompletionProvider : CompletionProvider<CompletionParameters>(
             "try-catch", "try-finally", "primitive-throw",
             "define-alias", "define-member-alias",
             "define-namespace", "define-constant",
+        )
+
+        /** Templates inserted as snippets when selected (tail text shows the skeleton). */
+        val KAWA_TEMPLATES = mapOf(
+            "define-simple-class" to "(define-simple-class Name (Super) ...)",
+            "define-mod" to "(define-mod \"id\" name: \"Name\" version: \"0.1.0\")",
+            "invoke-static" to "(invoke-static Class:method arg ...)",
+            "try-catch" to "(try-catch (begin ...) (ex Exception (begin ...)))",
+            "synchronized" to "(synchronized lock ...)",
         )
     }
 }
