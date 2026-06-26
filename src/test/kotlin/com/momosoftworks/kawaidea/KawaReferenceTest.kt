@@ -26,10 +26,15 @@ class KawaReferenceTest : BasePlatformTestCase() {
     fun testBareFqnResolvesToClass() {
         myFixture.configureByText(KawaFileType, "(define-simple-class S (net.example.It<caret>em))")
         myFixture.addFileToProject("net/example/Item.java", "package net.example; public class Item {}")
+        // Verify Java PSI can find the class at all.
+        val cls = com.intellij.psi.JavaPsiFacade.getInstance(project)
+            .findClass("net.example.Item", com.intellij.psi.search.GlobalSearchScope.allScope(project))
+        System.err.println("DIRECT findClass: $cls")
         val ref = myFixture.getReferenceAtCaretPosition()
         System.err.println("REF: $ref")
         val resolved = ref?.resolve()
         System.err.println("RESOLVED: $resolved (${resolved?.javaClass?.name})")
+        assertNotNull("JavaPsiFacade could not find the class either", cls)
         assertNotNull("expected a reference to resolve, got null", resolved)
         assertTrue("expected a PsiClass, got $resolved", resolved is PsiClass)
         assertEquals("net.example.Item", (resolved as PsiClass).qualifiedName)
