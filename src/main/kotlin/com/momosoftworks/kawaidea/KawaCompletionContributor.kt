@@ -276,7 +276,44 @@ private class KawaCompletionProvider : CompletionProvider<CompletionParameters>(
             collectLocalBindings(file, position, collected)
         }
 
-        // R7RS small language + Kawa built-ins
+        // ---- unqualified Java classes (first — fast path) ------------------
+        // Limit iteration so this completes before the timeout, unlike the
+        // full allClassNames scan which can be slow with thousands of entries.
+        if (prefix.length >= 2) {
+            val cache = PsiShortNamesCache.getInstance(project)
+            var added = 0
+            for (shortName in cache.allClassNames) {
+                if (!shortName.startsWith(prefix)) continue
+                val classes = cache.getClassesByName(shortName, scope)
+                for (cls in classes) {
+                    val fqn = cls.qualifiedName ?: continue
+                    val pkg = fqn.substringBeforeLast('.', "")
+                    result.addElement(
+                        LookupElementBuilder.create(shortName)
+                            .withIcon(classIcon(cls.isInterface))
+                            .withTypeText(if (cls.isInterface) "interface" else "class")
+                            .withTailText("  ($pkg)", true)
+                    )
+                    added++
+                    if (added >= 30) break  // hard limit to stay responsive
+                }
+                if (added >= 30) break
+            }
+        }
+
+        // ---- cross-project Scheme symbols ----------------------------------
+        val projectBindings = KawaProjectCache.getInstance(project).allDefinedSymbols()
+        for (name in projectBindings) {
+            if (!prefixMatches(prefix, name)) continue
+            if (name in collected) continue
+            result.addElement(
+                LookupElementBuilder.create(name)
+                    .withIcon(AllIcons.Nodes.Variable)
+                    .withTypeText("project")
+            )
+        }
+
+        // ---- builtins -------------------------------------------------------
         val builtins = R7RS_BUILTINS + KAWA_BUILTINS + KawaForms.SPECIAL_FORMS
 
         // Templates (snippets) — shown before builtins so they surface first.
@@ -303,26 +340,6 @@ private class KawaCompletionProvider : CompletionProvider<CompletionParameters>(
                     .withIcon(icon)
                     .withTypeText(if (collected.contains(name)) "local" else "builtin")
             )
-        }
-
-        // Unqualified Java class names.
-        // getAllClassNames() returns exact short names — no wildcards needed.
-        if (prefix.length >= 2) {
-            val cache = PsiShortNamesCache.getInstance(project)
-            for (shortName in cache.allClassNames) {
-                if (!shortName.startsWith(prefix)) continue
-                val classes = cache.getClassesByName(shortName, scope)
-                for (cls in classes.take(3)) { // same short name → multiple JARs
-                    val fqn = cls.qualifiedName ?: continue
-                    val pkg = fqn.substringBeforeLast('.', "")
-                    result.addElement(
-                        LookupElementBuilder.create(shortName)
-                            .withIcon(classIcon(cls.isInterface))
-                            .withTypeText(if (cls.isInterface) "interface" else "class")
-                            .withTailText("  ($pkg)", true)
-                    )
-                }
-            }
         }
     }
 

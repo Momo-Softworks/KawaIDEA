@@ -16,6 +16,9 @@
     <depends>com.intellij.modules.platform</depends>
     <depends>com.intellij.java</depends>
 
+    <!-- Project-level services -->
+    <projectService serviceImplementation="com.momosoftworks.kawaidea.KawaProjectCache"/>
+
     <extensions defaultExtensionNs="com.intellij">
         <fileType
             name="Kawa Scheme"
