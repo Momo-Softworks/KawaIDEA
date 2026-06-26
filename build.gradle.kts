@@ -20,12 +20,16 @@ repositories {
 }
 
 dependencies {
+    // CI: download the IDE (261.* = IntelliJ 2026.1.x).
+    // Local: use the installed IDE at the standard path.
+    val localIde = file("/opt/intellij-idea-community")
     intellijPlatform {
-        // Target a Java-bundling IDE so we can resolve FQNs into Java PSI in M4.
-        // Bump this to match the IDE you actually run.
-        // Build against the exact IDE installed on this machine (2026.1.3 / 261.25134.95)
-        // so behavior matches the runtime precisely.
-        local("/opt/intellij-idea-community")
+        if (localIde.isDirectory) {
+            local(localIde.absolutePath)
+        } else {
+            // IC artifact is discontinued in 2026.1; use intellijIdea instead.
+            intellijIdea("2026.1")
+        }
         bundledPlugin("com.intellij.java")
         testFramework(TestFrameworkType.Platform)
     }

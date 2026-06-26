@@ -6,8 +6,10 @@
     <description><![CDATA[
         Language support for <b>Kawa</b> (JVM Scheme).<br/>
         M1: file type, lexer, parser/PSI, syntax highlighting, brace matching.<br/>
-        Planned: Emacs-style indentation (M3), Scheme&#8594;Java navigation (M4),
-        completion (M5).
+        M2: PSI-level annotator (special forms, definitions, interop).<br/>
+        M3: Emacs-style indentation.<br/>
+        M4: Scheme→Java navigation (ctrl-click on interop names).<br/>
+        M5: Completion — Java classes, members, Scheme symbols.
     ]]></description>
 
     <!-- com.intellij.java is required so M4 can resolve interop FQNs into Java PSI. -->
@@ -41,5 +43,8 @@
         <psi.referenceContributor
             language="Kawa"
             implementation="com.momosoftworks.kawaidea.KawaReferenceContributor"/>
+        <completion.contributor
+            language="Kawa"
+            implementationClass="com.momosoftworks.kawaidea.KawaCompletionContributor"/>
     </extensions>
 </idea-plugin>
