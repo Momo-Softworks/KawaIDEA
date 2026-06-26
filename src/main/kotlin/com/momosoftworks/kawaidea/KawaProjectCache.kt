@@ -2,6 +2,9 @@ package com.momosoftworks.kawaidea
 
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.components.Service
+import com.intellij.openapi.editor.event.DocumentEvent
+import com.intellij.openapi.editor.event.DocumentListener
+import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFileManager
 import com.intellij.openapi.vfs.newvfs.BulkFileListener
@@ -36,6 +39,18 @@ class KawaProjectCache(private val project: Project) : Disposable {
                     }
                 }
             },
+        )
+
+        // Also invalidate for unsaved editor edits. This keeps completion aware of
+        // source definitions the user just typed, before the file is compiled or saved.
+        com.intellij.openapi.editor.EditorFactory.getInstance().eventMulticaster.addDocumentListener(
+            object : DocumentListener {
+                override fun documentChanged(event: DocumentEvent) {
+                    val virtualFile = FileDocumentManager.getInstance().getFile(event.document)
+                    if (virtualFile?.fileType is KawaFileType) invalidate()
+                }
+            },
+            this,
         )
     }
 

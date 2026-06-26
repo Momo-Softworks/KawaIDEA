@@ -55,4 +55,23 @@ class KawaSemanticTest {
             aliases,
         )
     }
+
+    @Test
+    fun `detects member colon contexts for autopopup`() {
+        assertTrue(isKawaMemberColonContext("String:", "String:".length))
+        assertTrue(isKawaMemberColonContext("java.lang.String:", "java.lang.String:".length))
+        assertTrue(isKawaMemberColonContext(":", 1))
+        assertFalse(isKawaMemberColonContext("name:", "name:".length))
+        assertFalse(isKawaMemberColonContext("foo:bar", 4))
+        assertFalse(isKawaMemberColonContext("#:name", 2))
+    }
+
+    @Test
+    fun `detects member prefixes after deletion`() {
+        assertTrue(isKawaMemberCompletionPrefix("String:", "String:".length))
+        assertTrue(isKawaMemberCompletionPrefix("String:val", "String:val".length))
+        assertTrue(isKawaMemberCompletionPrefix("(java.lang.String:val", "(java.lang.String:val".length))
+        assertFalse(isKawaMemberCompletionPrefix("name:", "name:".length))
+        assertFalse(isKawaMemberCompletionPrefix("foo:bar", "foo:bar".length))
+    }
 }

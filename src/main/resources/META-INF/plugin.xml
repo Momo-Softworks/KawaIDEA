@@ -46,6 +46,10 @@
         <completion.contributor
             language="Kawa"
             implementationClass="com.momosoftworks.kawaidea.KawaCompletionContributor"/>
+        <typedHandler
+            implementation="com.momosoftworks.kawaidea.KawaCompletionAutoPopupHandler"/>
+        <backspaceHandlerDelegate
+            implementation="com.momosoftworks.kawaidea.KawaCompletionBackspaceHandler"/>
         <lang.psiStructureViewFactory
             language="Kawa"
             implementationClass="com.momosoftworks.kawaidea.KawaStructureViewFactory"/>
