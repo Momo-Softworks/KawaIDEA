@@ -27,6 +27,17 @@ jobs:
       - name: Generate lexer and parser
         run: ./gradlew generateLexer generateParser
 
+      - name: Run tests
+        run: ./gradlew test --info
+
+      - name: Upload test reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-reports
+          path: build/reports/tests/test/
+          if-no-files-found: warn
+
       - name: Build plugin
         run: ./gradlew buildPlugin
 
@@ -39,6 +50,3 @@ jobs:
           name: kawaidea-plugin
           path: build/plugin-artifact/
           if-no-files-found: error
-
-      - name: Run tests
-        run: ./gradlew test
