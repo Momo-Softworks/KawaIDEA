@@ -32,6 +32,7 @@
     SYMBOL='symbol'
     LINE_COMMENT='line_comment'
     BLOCK_COMMENT='block_comment'
+    HASH_BANG_KEYWORD='hash_bang_keyword'
   ]
 }
 
@@ -48,6 +49,6 @@ vector ::= '#(' form* ')'
 quoted ::= quote_prefix form
 private quote_prefix ::= QUOTE | QUASIQUOTE | UNQUOTE | UNQUOTE_SPLICING
 
-atom ::= SYMBOL | STRING | NUMBER | BOOLEAN | CHARACTER {
+atom ::= SYMBOL | STRING | NUMBER | BOOLEAN | CHARACTER | HASH_BANG_KEYWORD {
   mixin="com.momosoftworks.kawaidea.psi.KawaAtomMixin"
 }

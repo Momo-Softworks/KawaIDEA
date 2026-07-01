@@ -16,6 +16,9 @@ import com.momosoftworks.kawaidea.psi.KawaTypes;
 
 WHITE_SPACE=[ \t\f\r\n]+
 LINE_COMMENT=";"[^\r\n]*
+// #!key, #!rest, #!optional, #!default, #!eof must be matched before SHEBANG
+// so they are not swallowed as comments.
+HASH_BANG_KEYWORD="#!"("key"|"rest"|"optional"|"default"|"eof"|"null-ok?")
 SHEBANG="#!"[^\r\n]*
 DATUM_COMMENT_MARKER="#;"
 BLOCK_COMMENT="#|"~"|#"
@@ -35,8 +38,9 @@ SYMBOL=[^ \t\f\r\n()\[\]{}\"';`,]+
 %%
 
 <YYINITIAL> {
-  {WHITE_SPACE}      { return TokenType.WHITE_SPACE; }
-  {SHEBANG}          { return KawaTypes.LINE_COMMENT; }
+  {WHITE_SPACE}           { return TokenType.WHITE_SPACE; }
+  {HASH_BANG_KEYWORD}     { return KawaTypes.HASH_BANG_KEYWORD; }
+  {SHEBANG}               { return KawaTypes.LINE_COMMENT; }
   {LINE_COMMENT}     { return KawaTypes.LINE_COMMENT; }
   {DATUM_COMMENT_MARKER} { return KawaTypes.SYMBOL; }
   {BLOCK_COMMENT}    { return KawaTypes.BLOCK_COMMENT; }

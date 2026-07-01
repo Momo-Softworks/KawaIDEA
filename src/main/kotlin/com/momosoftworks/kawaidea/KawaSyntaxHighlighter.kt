@@ -20,6 +20,7 @@ class KawaSyntaxHighlighter : SyntaxHighlighterBase() {
             KawaTypes.STRING -> arrayOf(KawaColors.STRING)
             KawaTypes.NUMBER -> arrayOf(KawaColors.NUMBER)
             KawaTypes.BOOLEAN, KawaTypes.CHARACTER -> arrayOf(KawaColors.CONSTANT)
+            KawaTypes.HASH_BANG_KEYWORD -> arrayOf(KawaColors.KEYWORD)
             KawaTypes.LPAREN, KawaTypes.RPAREN,
             KawaTypes.LBRACKET, KawaTypes.RBRACKET,
             KawaTypes.HASH_LPAREN -> arrayOf(KawaColors.PARENS)
