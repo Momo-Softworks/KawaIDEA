@@ -16,12 +16,14 @@ import com.momosoftworks.kawaidea.psi.KawaTypes;
 
 WHITE_SPACE=[ \t\f\r\n]+
 LINE_COMMENT=";"[^\r\n]*
-// Any #!<letter-started-word> is a Kawa special marker (#!null, #!void,
-// #!key, #!rest, #!optional, #!default, #!eof, #!true, #!false, ...).
-// Real shebangs are #!/ ... so the leading-letter requirement cleanly
-// excludes them — they fall through to SHEBANG unchanged.
+// Kawa special markers: #!null, #!void, #!key, #!rest, #!optional, etc.
+// The first char after #! is always a letter for these.
 HASH_BANG_KEYWORD="#!"[a-zA-Z][a-zA-Z0-9_?-]*
-SHEBANG="#!"[^\r\n]*
+// Unix shebang: #!/usr/bin/env kawa — first char after #! is always '/',
+// never a letter.  We enforce that here so SHEBANG can never match longer
+// than HASH_BANG_KEYWORD on the same input (JFlex picks the longest match,
+// not the first rule — order only breaks ties).
+SHEBANG="#!"[^a-zA-Z\r\n][^\r\n]*
 DATUM_COMMENT_MARKER="#;"
 BLOCK_COMMENT="#|"~"|#"
 
