@@ -14,6 +14,11 @@ import com.momosoftworks.kawaidea.psi.KawaTypes;
 %function advance
 %type IElementType
 
+// BOF is entered only at offset 0 (set by KawaLexerAdapter).
+// It handles the optional Unix shebang line and immediately falls
+// through to YYINITIAL for everything else.
+%xstate BOF
+
 WHITE_SPACE=[ \t\f\r\n]+
 LINE_COMMENT=";"[^\r\n]*
 // Kawa special markers: #!null, #!void, #!key, #!rest, #!optional, etc.
@@ -34,6 +39,13 @@ NUMBER=[+-]?[0-9][0-9a-fA-F.eE+\-/x]*
 SYMBOL=[^ \t\f\r\n()\[\]{}\"';`,]+
 
 %%
+
+// Shebang: only at the very top of the file (offset 0).
+// Anything other than #! in BOF state is pushed back and re-lexed in YYINITIAL.
+<BOF> {
+  "#!"[^\r\n]*            { yybegin(YYINITIAL); return KawaTypes.LINE_COMMENT; }
+  [^]                     { yypushback(1); yybegin(YYINITIAL); }
+}
 
 <YYINITIAL> {
   {WHITE_SPACE}           { return TokenType.WHITE_SPACE; }
