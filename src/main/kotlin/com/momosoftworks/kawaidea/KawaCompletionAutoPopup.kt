@@ -9,13 +9,18 @@ import com.intellij.psi.PsiFile
 
 /** Schedules member completion immediately after Kawa's Java/member colon syntax. */
 class KawaCompletionAutoPopupHandler : TypedHandlerDelegate() {
-    override fun checkAutoPopup(charTyped: Char, project: Project, editor: Editor, file: PsiFile): Result {
-        if (charTyped != ':' || file.language != KawaLanguage) return Result.CONTINUE
+    /**
+     * `afterCharTyped` fires after the character is inserted and the document is
+     * updated, so `offset - 1` is the `:` we just typed.  This is the correct
+     * hook for on-colon auto-popup; `checkAutoPopup` fires *before* insertion
+     * and would see the character before `:`, causing the context check to fail.
+     */
+    override fun charTyped(c: Char, project: Project, editor: Editor, file: PsiFile): Result {
+        if (c != ':' || file.language != KawaLanguage) return Result.CONTINUE
 
         PsiDocumentManager.getInstance(project).commitDocument(editor.document)
         if (isKawaMemberColonContext(editor)) {
             AutoPopupController.getInstance(project).scheduleAutoPopup(editor)
-            return Result.STOP
         }
 
         return Result.CONTINUE
