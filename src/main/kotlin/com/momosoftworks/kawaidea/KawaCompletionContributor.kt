@@ -236,16 +236,22 @@ private class KawaCompletionProvider : CompletionProvider<CompletionParameters>(
         val cls: PsiClass? = resolveClass(classPart, facade, scope)
 
         if (cls == null) {
-            // Offer matching unqualified class names so the user can complete
-            // the class part before picking a member.
+            // Offer matching class names so the user can complete the class
+            // part before picking a member.  Always filter by the short name
+            // (last dot segment) so that a FQN prefix like "net.minecraft.item.Item"
+            // still matches "Item" in the short-name cache.
             val cache = PsiShortNamesCache.getInstance(project)
+            val shortFilter = classPart.substringAfterLast('.')
+            val pkgFilter   = if ('.' in classPart) classPart.substringBeforeLast('.') else ""
             val matching = cache.allClassNames
-                .filter { it.startsWith(classPart) }
+                .filter { it.startsWith(shortFilter) }
                 .take(30)
             for (shortName in matching) {
                 val candidates = cache.getClassesByName(shortName, scope)
                 for (c in candidates) {
                     val fqn = c.qualifiedName ?: continue
+                    // If user typed a package prefix, filter to that package.
+                    if (pkgFilter.isNotEmpty() && !fqn.startsWith(pkgFilter)) continue
                     result.addElement(
                         LookupElementBuilder.create(fqn + ":")
                             .withPresentableText(shortName)
@@ -258,13 +264,28 @@ private class KawaCompletionProvider : CompletionProvider<CompletionParameters>(
             return
         }
 
-        // Methods
+        // Constructors — Kawa invokes them as ClassName:new
+        if (prefixMatches(memberPrefix, "new")) {
+            for (ctor in cls.constructors) {
+                val params = ctor.parameterList.parameters.joinToString(", ") { it.type.presentableText }
+                val insertText = (cls.qualifiedName ?: cls.name ?: "") + ":new"
+                result.addElement(
+                    LookupElementBuilder.create(insertText, "new")
+                        .withIcon(AllIcons.Nodes.Method)
+                        .withTypeText(cls.name ?: "")
+                        .withTailText("($params)", true)
+                        .bold()
+                )
+            }
+        }
+
+        // Methods (static and instance)
         for (method in cls.allMethods) {
             if (!prefixMatches(memberPrefix, method.name)) continue
             result.addElement(memberElement(cls, method))
         }
 
-        // Fields
+        // Fields (static and instance)
         for (field in cls.allFields) {
             if (!prefixMatches(memberPrefix, field.name)) continue
             result.addElement(fieldElement(cls, field))
@@ -404,31 +425,42 @@ private class KawaCompletionProvider : CompletionProvider<CompletionParameters>(
     }
 
     /**
-     * Resolve a possibly-unqualified class name.  Tries:
-     * 1. Fully-qualified name
-     * 2. Exact short-name match
-     * 3. Common Java packages (java.lang, java.util, java.io)
-     * 4. If the name is 2+ chars, prefix search via getAllClassNames
+     * Resolve a possibly-unqualified or fully-qualified class name.  Tries:
+     * 1. Fully-qualified lookup via JavaPsiFacade (fastest, exact).
+     * 2. Short-name lookup: always use the last dot-segment so that FQNs like
+     *    net.minecraft.item.Item correctly fall back to looking up "Item".
+     *    When multiple hits exist, prefer the one whose FQN matches exactly.
+     * 3. Common Java packages (java.lang, java.util, java.io).
+     * 4. Short-name prefix search (only for short/unqualified inputs).
      */
     private fun resolveClass(name: String, facade: JavaPsiFacade, scope: GlobalSearchScope): PsiClass? {
-        // 1. Fully qualified
+        // 1. Fully qualified direct lookup.
         facade.findClass(name, scope)?.let { return it }
-        // 2. Unqualified — exact short name match
+
         val cache = PsiShortNamesCache.getInstance(facade.project)
-        val exactMatches = cache.getClassesByName(name, scope)
-        if (exactMatches.size == 1) return exactMatches[0]
-        // 3. Common Java packages
+
+        // 2. Short-name lookup — always derived from the last segment so FQNs work.
+        val shortName = name.substringAfterLast('.')
+        val byShort = cache.getClassesByName(shortName, scope)
+        when {
+            byShort.size == 1 -> return byShort[0]
+            byShort.size > 1  -> {
+                // If input was a FQN, prefer the exact FQN match.
+                byShort.firstOrNull { it.qualifiedName == name }?.let { return it }
+                // Otherwise just take the first hit.
+                return byShort[0]
+            }
+        }
+
+        // 3. Common Java packages.
         for (pkg in listOf("java.lang", "java.util", "java.io")) {
             facade.findClass("$pkg.$name", scope)?.let { return it }
         }
-        // 4. Partial / prefix match via getAllClassNames
-        if (name.length >= 2) {
-            val matching = cache.allClassNames
-                .filter { it.startsWith(name) }
-                .take(5)
-            for (shortName in matching) {
-                val candidates = cache.getClassesByName(shortName, scope)
-                if (candidates.isNotEmpty()) return candidates[0]
+
+        // 4. Short-name prefix search (only useful for unqualified inputs).
+        if (!name.contains('.') && shortName.length >= 2) {
+            for (cn in cache.allClassNames.filter { it.startsWith(shortName) }.take(5)) {
+                cache.getClassesByName(cn, scope).firstOrNull()?.let { return it }
             }
         }
         return null
@@ -494,7 +526,7 @@ private class KawaCompletionProvider : CompletionProvider<CompletionParameters>(
         val presentable = method.name
 
         return LookupElementBuilder.create(displayName, presentable)
-            .withIcon(if (static) AllIcons.Nodes.Method else AllIcons.Nodes.Method)
+            .withIcon(if (static) AllIcons.Nodes.MethodReference else AllIcons.Nodes.Method)
             .withTypeText(returnType)
             .withTailText("($params)" + if (static) "  static" else "", true)
     }
@@ -506,7 +538,7 @@ private class KawaCompletionProvider : CompletionProvider<CompletionParameters>(
         val presentable = field.name
 
         return LookupElementBuilder.create(displayName, presentable)
-            .withIcon(if (static) AllIcons.Nodes.Field else AllIcons.Nodes.Field)
+            .withIcon(AllIcons.Nodes.Field)
             .withTypeText(type)
             .withTailText(if (static) "  static" else "", true)
     }
